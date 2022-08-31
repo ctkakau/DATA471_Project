@@ -1,0 +1,47 @@
+---
+title: "DATA471_Group_EDA"
+author: "kakauchad_300212228"
+date: "2022-08-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, include = TRUE)
+library(ggplot2)
+library(reticulate)
+library(ggthemes)
+library(rmarkdown)
+library(knitr)
+library(reshape2)
+library(dplyr)
+```
+\section{Introduction}
+\label{intro}
+
+This project will look at the impact of the New Zealand Government's decisions around managing the COVID-19 Pandemic.  The analysis seeks to find relationships between key decisions made by the government and any changes in key social and economic indicators including criminal offending, employment, well-being, and public confidence in government institutions.  The majority of data for this project is sourced from "StatsNZ Wellbeing data for NZ" website. (https://statisticsnz.shinyapps.io/wellbeingindicators/_w_f12c8130/?page=home)
+
+In responding to COVID-19, the New Zealand Government, like all governments, took extraordinary steps to try and prevent the introduction of COVID-19 into the country (by closing New Zealand's international borders), then successfully eradicating COVID-19 with the introduction of strict controls on movement (lockdowns).  After COVID re-entered the country, the government employed a range of measures to limit the spread or mitigate the impact of infections, including limits on movement, mandating the use personal protective equipment, mandating vaccinations and the use of quarantine for people arriving into the country.  
+
+These decisions by the government have intended consequences (i.e. managing the spread of COVID-19) and many unintended consequences were managed as well.  For example, where retail closures for non-essential products and services leading to reduced income, offset by government grant and subsidies to business owners.  The authors expect to identify the times where the government made key decisions and will look for changes in key indicators:  
+- Family violence - changes in arrest, report or prosecution rates  
+- victimisations - changes in arrest, report or prosecution rates  
+- employment - changes in employment rate, by region  
+- hourly salary - changes in hourly rate, by sector/region  
+- well-being - changes in feelings of security  
+- well-being - changes in  
+- trust in public institutions - government  
+- trust in public institutions - police  
+- USE OF POLICE RESOURCES  
+
+\section{Data characteristics}
+The initial dataset from StatsNZ Wellbeing indicators is large and contains several indicators
+
+```{r readInProjectData, echo = FALSE}
+indic <- read.csv("indicators.csv")
+
+```
+
