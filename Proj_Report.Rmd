@@ -151,6 +151,8 @@ gov_dec <- url %>%
 # write table to file for transfer
 write_csv(gov_dec, "NZ_govt_covid.csv")
 ```
+
+
 ```{r wordcloudFunctionForFutureUse}
 # display text for info
 library(wordcloud)
