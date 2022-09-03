@@ -18,30 +18,200 @@ library(rmarkdown)
 library(knitr)
 library(reshape2)
 library(dplyr)
+library(tidyverse)
+library(tm)
+library(wordcloud)
+library(wordcloud2)
+library(RColorBrewer)
 ```
-\section{Introduction}
-\label{intro}
+\section{Background and data}
+\label{sec:background}
+
+In responding to COVID-19, the New Zealand Government, like all governments, took extraordinary steps to try and prevent the introduction of COVID-19 into the country (by closing New Zealand's international borders), then successfully eradicating COVID-19 with the introduction of strict controls on movement (lockdowns).  After COVID re-entered the country, the government employed a range of measures to limit the spread or mitigate the impact of infections, including limits on movement, mandating the use personal protective equipment, mandating vaccinations and the use of quarantine for people arriving into the country. 
 
 This project will look at the impact of the New Zealand Government's decisions around managing the COVID-19 Pandemic.  The analysis seeks to find relationships between key decisions made by the government and any changes in key social and economic indicators including criminal offending, employment, well-being, and public confidence in government institutions.  The majority of data for this project is sourced from "StatsNZ Wellbeing data for NZ" website. (https://statisticsnz.shinyapps.io/wellbeingindicators/_w_f12c8130/?page=home)
 
-In responding to COVID-19, the New Zealand Government, like all governments, took extraordinary steps to try and prevent the introduction of COVID-19 into the country (by closing New Zealand's international borders), then successfully eradicating COVID-19 with the introduction of strict controls on movement (lockdowns).  After COVID re-entered the country, the government employed a range of measures to limit the spread or mitigate the impact of infections, including limits on movement, mandating the use personal protective equipment, mandating vaccinations and the use of quarantine for people arriving into the country.  
+These decisions by the government have intended consequences (i.e. managing the spread of COVID-19) and many unintended consequences were managed as well.  For example, where retail closures for non-essential products and services leading to reduced income, offset by government grant and subsidies to business owners.  The authors expect to identify the times where the government made key decisions and will look for changes in key indicators from official datasets:  
 
-These decisions by the government have intended consequences (i.e. managing the spread of COVID-19) and many unintended consequences were managed as well.  For example, where retail closures for non-essential products and services leading to reduced income, offset by government grant and subsidies to business owners.  The authors expect to identify the times where the government made key decisions and will look for changes in key indicators:  
-- Family violence - changes in arrest, report or prosecution rates  
-- victimisations - changes in arrest, report or prosecution rates  
-- employment - changes in employment rate, by region  
-- hourly salary - changes in hourly rate, by sector/region  
-- well-being - changes in feelings of security  
-- well-being - changes in  
-- trust in public institutions - government  
-- trust in public institutions - police  
-- USE OF POLICE RESOURCES  
+  - Personal well-being, including:
+    - Generalised trust
+    - Institutional trust
+    - Discrimination
+    - Family well-being
+    - loneliness
+  - Crime data, including:
+    - Family violence - changes in arrest, report or prosecution rates  
+    - victimisations - changes in arrest, report or prosecution rates
+    - alcohol-related offending
+  - economic indicators, including:
+    - employment - changes in employment rate, by region     - hourly salary - changes in hourly rate, by sector/region  
 
 \section{Data characteristics}
-The initial dataset from StatsNZ Wellbeing indicators is large and contains several indicators
+\label{sec:datachx}
+
+The datasets are drawn from official data, including the Household Labour Force Survey (supplementary), Police statistics, and the Economic Survey.  As official datasets, each set comprises multiple categorical variables identifying aspects such as series, sub-series, indicator-names, and parameters. Each set also includes numerical variables for the main value of interest, and most include a time-stamp, most often as a categoric marker for the period which the data represents.    
+
+\section{Ethical considerations}
+\label{sec:ethics}
+
+This project looks at the effects of government decisions on society, by considering a range of statistics, many gathered for a specific purpose (e.g. the salary: hourly wage rate is collected as an economic indicator, trust in public institutions is collected as measure of confidence in pillars of society etc.) but will be used as proxies (individually or in combination) in this project for estimating some other aspect of society.  While the information used is publicly available, we need to be aware that project output may have effects beyond those intended from the original collection. 
+
+
+
+\section{Security considerations}
+\label{sec:security}
+
+
+\section{Privacy considerations}
+\label{sec:privacy}
+
+
+
+The initial dataset from StatsNZ Wellbeing indicators is large and contains several indicators, which we initially read in and factorise variables to ensure appropriate handling.
 
 ```{r readInProjectData, echo = FALSE}
+# read-in multiple datasets
 indic <- read.csv("indicators.csv")
+
+# factorise categoric variables
+indic$class <- factor(indic$class)
+indic$category <- factor(indic$category)
+indic$indicator_name <- factor(indic$indicator_name)
+indic$series_name <- factor(indic$series_name)
+indic$sub_series_name <- factor(indic$sub_series_name)
+indic$parameter <- factor(indic$parameter)
+indic$units <- factor(indic$units)
+indic$date <- factor(indic$date)
+```
+
+\subsection{Initial review of data}
+\label{sec:initial}
+
+We begin by breaking the data into usable sets and briefly summarise the data:  
+
+ - describe distributions
+ - describe noteworthy features of the data
+
+## Trust in institutions: Police  
+
+The data reports public trust in the police on an annual basis and includes:  
+
+  - By region
+  - By ethnicity
+  - By age group  
+
+```{r trustPoliceRegion}
+# break main dataset thematic objects
+trust_pol <- indic[indic$indicator_name=="Institutional trust: police",]
+trust_pol_reg <- trust_pol[trust_pol$series_name == "By region",] 
+trust_pol_reg <- trust_pol_reg[!grepl("upper", trust_pol_reg$sub_series_name),]
+trust_pol_reg<- trust_pol_reg[!grepl("lower", trust_pol_reg$sub_series_name),]
+trust_pol_reg_upper <- trust_pol_reg[grepl("upper", trust_pol_reg$sub_series_name),]
+trust_pol_reg_lower <- trust_pol_reg[grepl("lower", trust_pol_reg$sub_series_name),]
+trust_pol_tot <- trust_pol[trust_pol$series_name == "Total",]
+summary(trust_pol_reg)
+```
+
+
+
+```{r trustPoliceSetupPlot}
+# start with institutional trust: police
+pol_plot <- ggplot(trust_pol_reg) +
+  geom_boxplot(aes(x = value, 
+                   y = sub_series_name)) +
+  labs(title = "Boxplots of trust in institutions\n Police, by region",
+       x = "distribution",
+       y = "region")
+
+# output box plot
+pol_plot
+```
+
+
+
+```{r extractDecisionsFromWebsite}
+# use rvest from tidyverse
+# support:  https://rvest.tidyverse.org/
+library(rvest)
+
+# navigate to the mcquinness institute website
+url <- read_html("https://www.mcguinnessinstitute.org/projects/pandemic-nz/covid-19-timeline/")
+
+# grab the table
+# https://tidyr.tidyverse.org/reference/separate.html
+gov_dec <- url %>% 
+  html_element("table") %>%
+  html_table() %>%
+  separate(Event, 
+           c("heading", "detail", "reference"),
+           sep = "\n",
+           extra = 'merge',
+           fill = 'right')
+
+# write table to file for transfer
+write_csv(gov_dec, "NZ_govt_covid.csv")
+```
+```{r wordcloudFunctionForFutureUse}
+# display text for info
+library(wordcloud)
+library(tm)
+
+# method: https://towardsdatascience.com/create-a-word-cloud-with-r-bde3e7422e8a
+# create a function so I can do it easily over and over
+make_cloud <- function(x, 
+                       minfreq = 1, 
+                       seed = 471,
+                       width = 400,
+                       height = 200) {
+  text <- x
+  docs <- Corpus(VectorSource(text))
+  
+  # clean the text
+  docs <- docs %>%
+    tm_map(removePunctuation) %>%
+    #tm_map(removeNumbers) %>%
+    tm_map(stripWhitespace) 
+  docs <- tm_map(docs, content_transformer(tolower))
+  docs <- tm_map(docs, removeWords, stopwords("english"))
+  
+  # create a document term matrix
+  dtm <- TermDocumentMatrix(docs)
+  matrix <- as.matrix(dtm)
+  words <- sort(rowSums(matrix), decreasing = TRUE)
+  df <- data.frame(word = names(words), freq = words)
+  
+  # generate a wordcloud
+  set.seed(seed)
+  cloud <- wordcloud(words = df$word, freq = df$freq, 
+                     min.freq = minfreq,
+                     max.words = 200, 
+                     width = width,
+                     height = height,
+                     random.order = FALSE, 
+                     rot.per = 0.35, 
+                     colors = brewer.pal(8, 'Dark2'),)
+  
+  return(cloud)
+}
+```
+
+
+
+```{r wordCloudOutputs, }
+# word cloud for the headings column
+head_cloud <- make_cloud(gov_dec$heading, 5, 42)
+# word cloud for the column of detailed breakdown
+detail_cloud <- make_cloud(gov_dec$detail, 
+                           minfreq = 20, 
+                           seed = 42,
+                           width = 400,
+                           height = 400)
+
+```
+
+```{r plotSomeDates}
+ggplot(gov_dec) +
+  geom_point(aes(x = Date, y = tolower(Themes)))
 
 ```
 
