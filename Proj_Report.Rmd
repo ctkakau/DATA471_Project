@@ -11,7 +11,9 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, include = TRUE)
+rm(list = ls())
 library(ggplot2)
+library(ggthemes)
 library(reticulate)
 library(ggthemes)
 library(rmarkdown)
@@ -20,9 +22,11 @@ library(reshape2)
 library(dplyr)
 library(tidyverse)
 library(tm)
+library(rvest)
 library(wordcloud)
 library(wordcloud2)
 library(RColorBrewer)
+library(lubridate)
 ```
 \section{Background and data}
 \label{sec:background}
@@ -57,7 +61,6 @@ The datasets are drawn from official data, including the Household Labour Force 
 This project looks at the effects of government decisions on society, by considering a range of statistics, many gathered for a specific purpose (e.g. the salary: hourly wage rate is collected as an economic indicator, trust in public institutions is collected as measure of confidence in pillars of society etc.) but will be used as proxies (individually or in combination) in this project for estimating some other aspect of society.  While the information used is publicly available, we need to be aware that project output may have effects beyond those intended from the original collection. 
 
 
-
 \section{Security considerations}
 \label{sec:security}
 
@@ -67,21 +70,94 @@ This project looks at the effects of government decisions on society, by conside
 
 
 
-The initial dataset from StatsNZ Wellbeing indicators is large and contains several indicators, which we initially read in and factorise variables to ensure appropriate handling.
+The initial dataset from StatsNZ Wellbeing indicators is large and contains several indicators, which we initially read in, factorise categorical variables, and split into objects by theme. 
 
 ```{r readInProjectData, echo = FALSE}
 # read-in multiple datasets
 indic <- read.csv("indicators.csv")
+library(dplyr)
+
+# won't be using the upper and lower measures, retain only mean scores
+indic <- indic %>%
+  filter(!grepl("upper", sub_series_name),
+         !grepl("lower", sub_series_name))
 
 # factorise categoric variables
-indic$class <- factor(indic$class)
-indic$category <- factor(indic$category)
-indic$indicator_name <- factor(indic$indicator_name)
-indic$series_name <- factor(indic$series_name)
-indic$sub_series_name <- factor(indic$sub_series_name)
-indic$parameter <- factor(indic$parameter)
-indic$units <- factor(indic$units)
-indic$date <- factor(indic$date)
+indic[, c(1:5,8)] <- lapply(indic[, c(1:5, 8)], as.factor)
+
+# split by indicator_name
+indicator_list <- split(indic, indic$indicator_name)
+
+# name dataframes within the indicator_list
+indic_list_names <- c('structure', 'pov_after', 'pov_before',
+                      'pov_hardship', 'corruption', 'employ_rate',
+                      'cultural_activities', 'family_violence',
+                      'feel_safe', 'geo_dist', 'hourly', 
+                      'housing_afford', 'income', 'trust_parliament', 'trust_police', 'life_satisfaction', 
+                      'literacy', 'loneliness', 'low_income',
+                      'production', 'sense_control',
+                      'reo_speakers', 'victimisation')
+names(indicator_list) <- indic_list_names
+
+# object for loneliness
+loneliness <- as.data.frame(indicator_list['loneliness'],
+                            col.names= colnames(indicator_list['loneliness']))
+
+# object for trust in police
+trust_police <- as.data.frame(indicator_list['trust_police'],
+                              col.names = colnames(indicator_list['trust_police']))
+
+# object for trust in parliament
+trust_parliament <- as.data.frame(indicator_list['trust_parliament'], 
+                                  col.names = colnames(indicator_list['trust_parliament']))
+
+# object for employment rate
+employ <- as.data.frame(indicator_list['employ_rate'], 
+                        col.names = colnames(indicator_list['employ_rate']))
+
+# object for hourly rate
+hourly <- as.data.frame(indicator_list['hourly'], 
+                        col.names = colnames(indicator_list['hourly']))
+
+# object for family violence
+family_violence <- as.data.frame(indicator_list['family_violence'],
+                                 col.names = colnames(indicator_list['family_violence']))
+```
+
+\subsection{Boxplots of some wellbeing indicators}
+\label{ssec:boxes}
+
+```{r buildAllThePlots, out.width= "50%"}
+# plot the loneliness
+loneliness_box <- ggplot(data = loneliness, aes(x = date, y = value)) +
+  geom_boxplot(aes(colour = series_name)) +
+  # facet_wrap(~ series_name) +
+  theme_dark()+
+  scale_colour_colorblind()+
+  labs(title = paste0("Boxplot of loneliness, by series"))
+
+# make lots of plots
+wellbeing_objects <- list(loneliness, trust_police, trust_parliament,
+                          family_violence) # more dates: employ, hourly, 
+obj_names <- c("loneliness", "trust_police", "trust_parliament",
+                          "family_violence") # "employ", "hourly", 
+
+for (i in 1:length(wellbeing_objects)){
+
+  plot <- ggplot(data = wellbeing_objects[[i]], aes(x = date, y = value)) +
+    geom_boxplot(aes(colour = series_name)) +
+    theme_dark() +
+    scale_colour_colorblind() +
+    labs(title = paste0("Boxplot of ", obj_names[i], " by date and series name"))
+  print(plot)
+}
+```
+
+
+
+
+```{r plotOfLoneliness}
+loneliness_box
 ```
 
 \subsection{Initial review of data}
@@ -100,39 +176,10 @@ The data reports public trust in the police on an annual basis and includes:
   - By ethnicity
   - By age group  
 
-```{r trustPoliceRegion}
-# break main dataset thematic objects
-trust_pol <- indic[indic$indicator_name=="Institutional trust: police",]
-trust_pol_reg <- trust_pol[trust_pol$series_name == "By region",] 
-trust_pol_reg <- trust_pol_reg[!grepl("upper", trust_pol_reg$sub_series_name),]
-trust_pol_reg<- trust_pol_reg[!grepl("lower", trust_pol_reg$sub_series_name),]
-trust_pol_reg_upper <- trust_pol_reg[grepl("upper", trust_pol_reg$sub_series_name),]
-trust_pol_reg_lower <- trust_pol_reg[grepl("lower", trust_pol_reg$sub_series_name),]
-trust_pol_tot <- trust_pol[trust_pol$series_name == "Total",]
-summary(trust_pol_reg)
-```
-
-
-
-```{r trustPoliceSetupPlot}
-# start with institutional trust: police
-pol_plot <- ggplot(trust_pol_reg) +
-  geom_boxplot(aes(x = value, 
-                   y = sub_series_name)) +
-  labs(title = "Boxplots of trust in institutions\n Police, by region",
-       x = "distribution",
-       y = "region")
-
-# output box plot
-pol_plot
-```
-
-
-
 ```{r extractDecisionsFromWebsite}
 # use rvest from tidyverse
 # support:  https://rvest.tidyverse.org/
-library(rvest)
+# library(rvest)
 
 # navigate to the mcquinness institute website
 url <- read_html("https://www.mcguinnessinstitute.org/projects/pandemic-nz/covid-19-timeline/")
@@ -147,7 +194,24 @@ gov_dec <- url %>%
            sep = "\n",
            extra = 'merge',
            fill = 'right')
-
+# fix that one date...
+gov_dec$Date[77] <- "29 Nov 2021"
+# create a variable to consolidate
+gov_dec$type <- ifelse(grepl("outbreak", gov_dec$Themes, ignore.case = TRUE), 
+                       "Outbreak",
+                ifelse(grepl("ppe", gov_dec$Themes, ignore.case = TRUE), 
+                       "PPE",
+                ifelse(grepl("bubble", gov_dec$Themes, ignore.case = TRUE), 
+                       "Bubble",
+                ifelse(grepl("vaccination", gov_dec$Themes, ignore.case = TRUE), 
+                       "Vaccination",
+                ifelse(grepl("border", gov_dec$Themes, ignore.case = TRUE),
+                       "Border", 
+                ifelse(grepl("health", gov_dec$Themes, ignore.case = TRUE), 
+                       "Health care", gov_dec$Themes))))))
+# convert Date column to date
+gov_dec$Date <- dmy(gov_dec$Date)
+str(gov_dec)
 # write table to file for transfer
 write_csv(gov_dec, "NZ_govt_covid.csv")
 ```
@@ -155,8 +219,8 @@ write_csv(gov_dec, "NZ_govt_covid.csv")
 
 ```{r wordcloudFunctionForFutureUse}
 # display text for info
-library(wordcloud)
-library(tm)
+# library(wordcloud)
+# library(tm) 
 
 # method: https://towardsdatascience.com/create-a-word-cloud-with-r-bde3e7422e8a
 # create a function so I can do it easily over and over
@@ -197,9 +261,12 @@ make_cloud <- function(x,
 }
 ```
 
+\subsection{Government decisions - wordclouds}
+\label{ssec:wordclouds}
 
+We extracted text data from the McGuinness Institute website (https://www.mcguinnessinstitute.org/projects/pandemic-nz/covid-19-timeline/)
 
-```{r wordCloudOutputs, }
+```{r wordCloudOutputs, out.width="50%"}
 # word cloud for the headings column
 head_cloud <- make_cloud(gov_dec$heading, 5, 42)
 # word cloud for the column of detailed breakdown
@@ -213,7 +280,10 @@ detail_cloud <- make_cloud(gov_dec$detail,
 
 ```{r plotSomeDates}
 ggplot(gov_dec) +
-  geom_point(aes(x = Date, y = tolower(Themes)))
+  geom_point(aes(x = Date, y = type)) +
+  labs(title = "Scatterplot of announcement types, by date",
+       x = "Date",
+       y = "Announcement category")
 
 ```
 
