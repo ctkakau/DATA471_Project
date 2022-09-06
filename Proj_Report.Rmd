@@ -12,6 +12,8 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, warning = FALSE, include = TRUE)
 rm(list = ls())
+# renv::init()
+renv::activate()
 library(ggplot2)
 library(ggthemes)
 library(reticulate)
@@ -74,12 +76,14 @@ The initial dataset from StatsNZ Wellbeing indicators is large and contains seve
 ```{r readInProjectData, echo = FALSE}
 # read-in multiple datasets
 indic <- read.csv("indicators.csv")
-library(dplyr)
+#library(dplyr)
 
 # won't be using the upper and lower measures, retain only mean scores
 indic <- indic %>%
   filter(!grepl("upper", sub_series_name),
          !grepl("lower", sub_series_name))
+
+#indic$date <- dmy(indic$date)
 
 # factorise categoric variables
 indic[, c(1:5,8)] <- lapply(indic[, c(1:5, 8)], as.factor)
@@ -88,70 +92,69 @@ indic[, c(1:5,8)] <- lapply(indic[, c(1:5, 8)], as.factor)
 indicator_list <- split(indic, indic$indicator_name)
 
 # name dataframes within the indicator_list
-indic_list_names <- c('structure', 'pov_after', 'pov_before',
-                      'pov_hardship', 'corruption', 'employ_rate',
+indic_list_names <- c('structure', 'poverty_after', 'poverty_before',
+                      'poverty_hardship', 'corruption', 'employment_rate',
                       'cultural_activities', 'family_violence',
-                      'feel_safe', 'geo_dist', 'hourly', 
-                      'housing_afford', 'income', 'trust_parliament', 'trust_police', 'life_satisfaction', 
+                      'feeling_safe', 'geographic_distribution', 'hourly_rate', 
+                      'housing_afford', 'income', 'trust_in_parliament', 
+                      'trust_in_police', 'life_satisfaction', 
                       'literacy', 'loneliness', 'low_income',
-                      'production', 'sense_control',
+                      'regional_production', 'sense_control',
                       'reo_speakers', 'victimisation')
 names(indicator_list) <- indic_list_names
 
-# object for loneliness
-loneliness <- as.data.frame(indicator_list['loneliness'],
-                            col.names= colnames(indicator_list['loneliness']))
-
-# object for trust in police
-trust_police <- as.data.frame(indicator_list['trust_police'],
-                              col.names = colnames(indicator_list['trust_police']))
-
-# object for trust in parliament
-trust_parliament <- as.data.frame(indicator_list['trust_parliament'], 
-                                  col.names = colnames(indicator_list['trust_parliament']))
-
-# object for employment rate
-employ <- as.data.frame(indicator_list['employ_rate'], 
-                        col.names = colnames(indicator_list['employ_rate']))
-
-# object for hourly rate
-hourly <- as.data.frame(indicator_list['hourly'], 
-                        col.names = colnames(indicator_list['hourly']))
-
-# object for family violence
-family_violence <- as.data.frame(indicator_list['family_violence'],
-                                 col.names = colnames(indicator_list['family_violence']))
+# split list into objects even though it is not recommended
+for (i in 1:length(indic_list_names)){
+  assign(paste0(indic_list_names[i]),
+         as.data.frame(indicator_list[[i]],
+                       col.names = colnames(indicator_list[[i]])))
+}
 ```
 
 \subsection{Boxplots of some wellbeing indicators}
 \label{ssec:boxes}
 
 ```{r buildAllThePlots, out.width= "50%"}
-# plot the loneliness
-loneliness_box <- ggplot(data = loneliness, aes(x = date, y = value)) +
-  geom_boxplot(aes(colour = series_name)) +
-  # facet_wrap(~ series_name) +
-  theme_dark()+
-  scale_colour_colorblind()+
-  labs(title = paste0("Boxplot of loneliness, by series"))
-
 # make lots of plots
-wellbeing_objects <- list(loneliness, trust_police, trust_parliament,
-                          family_violence) # more dates: employ, hourly, 
-obj_names <- c("loneliness", "trust_police", "trust_parliament",
-                          "family_violence") # "employ", "hourly", 
+wellbeing_objects <- list(loneliness, trust_in_police, trust_in_parliament,
+                          family_violence) #, employment_rate)  
+obj_names <- c("loneliness", "trust_in_police", "trust_in_parliament",
+                          "family_violence") #, "employment_rate")  
 
 for (i in 1:length(wellbeing_objects)){
 
   plot <- ggplot(data = wellbeing_objects[[i]], aes(x = date, y = value)) +
     geom_boxplot(aes(colour = series_name)) +
-    theme_dark() +
-    scale_colour_colorblind() +
+    theme_dark() + 
+    scale_fill_colorblind() +
+    # scale_colour_colorblind() +
     labs(title = paste0("Boxplot of ", obj_names[i], " by date and series name"))
   print(plot)
 }
 ```
+The boxplots show a slight increase in total loneliness between 2014 and 2021, with generally higher loneliness and greater spread across disability status.  Similarly, trust in police has remained fairly stable with total trust at around 80%, but there is much greater spread and lower levels of reported trust by ethnicity. Trust in parliament increased slightly over the period 2014 to 2021, but is well below levels of trust shown in police at around 40%.
 
+
+
+
+```{r plotEmployeeHourly, out.width="50%"}
+# boxplots
+employment_rate$date <- ymd(employment_rate$date)
+# make lots of plots
+economic_objects <- list(employment_rate, hourly_rate)   
+econ_names <- c("employment_rate", "hourly_rate")  
+
+for (i in 1:length(econ_names)){
+plot <- ggplot(data = economic_objects[[i]], aes(y = value)) +
+  geom_boxplot(aes(colour = series_name)) +
+  theme_dark() + 
+  scale_fill_colorblind() +
+  # facet_wrap(~date) + 
+  labs(title = paste0("Boxplots of ",econ_names[i] ," by date and series name"),
+       x = "")
+print(plot)
+}
+```
 
 \subsection{Initial review of data}
 \label{sec:initial}
